@@ -72,7 +72,7 @@ def get_gemini_response(user_message: str, history: list) -> str:
 
     try:
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name="gemini-2.5-flash",
             system_instruction=SYSTEM_PROMPT,
         )
 
@@ -170,7 +170,7 @@ def status():
     key_set = bool(API_KEY and API_KEY != "your_gemini_api_key_here")
     return jsonify({
         "api_configured": key_set,
-        "model": "gemini-1.5-flash",
+        "model": "gemini-2.5-flash",
         "status": "ready" if key_set else "needs_api_key",
     })
 
