@@ -5,6 +5,13 @@
 // ─── State ──────────────────────────────────────────────────────
 let messageCount = 0;
 let isLoading    = false;
+let currentChatId = generateId();
+let currentChatMessages = [];
+let savedChats = JSON.parse(localStorage.getItem('ai_saved_chats') || '{}');
+
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
 
 // ─── DOM References ─────────────────────────────────────────────
 const messagesArea    = document.getElementById('messagesArea');
@@ -23,6 +30,14 @@ const apiBadgeText    = document.getElementById('apiBadgeText');
 const toast           = document.getElementById('toast');
 const mobileMenuBtn   = document.getElementById('mobileMenuBtn');
 const sidebar         = document.getElementById('sidebar');
+
+// New History References
+const newChatBtn      = document.getElementById('newChatBtn');
+const historyToggleBtn= document.getElementById('historyToggleBtn');
+const historyOverlay  = document.getElementById('historyOverlay');
+const historyPanel    = document.getElementById('historyPanel');
+const closeHistoryBtn = document.getElementById('closeHistoryBtn');
+const historyListEl   = document.getElementById('historyList');
 
 // ─── Init ────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -57,6 +72,12 @@ function setupEventListeners() {
 
   // Clear conversation
   clearBtn.addEventListener('click', clearConversation);
+
+  // History / New Chat
+  if (historyToggleBtn) historyToggleBtn.addEventListener('click', toggleHistoryPanel);
+  if (closeHistoryBtn) closeHistoryBtn.addEventListener('click', toggleHistoryPanel);
+  if (historyOverlay) historyOverlay.addEventListener('click', toggleHistoryPanel);
+  if (newChatBtn) newChatBtn.addEventListener('click', startNewChat);
 
   // Mobile sidebar toggle
   mobileMenuBtn.addEventListener('click', () => sidebar.classList.toggle('open'));
@@ -157,6 +178,9 @@ async function sendMessageText(text) {
   appendMessage('user', text);
   messageCount++;
   updateMessageCount();
+  
+  currentChatMessages.push({ role: 'user', content: text });
+  saveCurrentChat();
 
   // Show typing
   setLoading(true);
@@ -165,7 +189,7 @@ async function sendMessageText(text) {
     const res  = await fetch('/api/chat', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ message: text }),
+      body:    JSON.stringify({ message: text, chat_id: currentChatId }),
     });
 
     const data = await res.json();
@@ -175,6 +199,9 @@ async function sendMessageText(text) {
     }
 
     appendMessage('ai', data.response);
+    currentChatMessages.push({ role: 'ai', content: data.response });
+    saveCurrentChat();
+    
     messageCount = data.message_count || messageCount + 1;
     updateMessageCount();
 
@@ -249,13 +276,51 @@ function setLoading(state) {
 // ─── Clear Conversation ──────────────────────────────────────────
 async function clearConversation() {
   try {
-    await fetch('/api/clear', { method: 'POST' });
-    messagesArea.innerHTML = '';
-    messageCount = 0;
-    updateMessageCount();
+    await fetch('/api/clear', { 
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: currentChatId })
+    });
+    
+    if (savedChats[currentChatId]) {
+      delete savedChats[currentChatId];
+      localStorage.setItem('ai_saved_chats', JSON.stringify(savedChats));
+      renderHistoryList();
+    }
+    
+    startNewChat();
     showToast('Conversation cleared', 'success');
+  } catch {
+    showToast('Failed to clear conversation', 'error');
+  }
+}
 
-    // Restore welcome screen
+// ─── History Management ──────────────────────────────────────────
+function saveCurrentChat() {
+  if (currentChatMessages.length === 0) return;
+  
+  const title = currentChatMessages[0].content.substring(0, 40) + (currentChatMessages[0].content.length > 40 ? '...' : '');
+  
+  savedChats[currentChatId] = {
+    id: currentChatId,
+    title: title,
+    date: new Date().toISOString(),
+    messages: currentChatMessages
+  };
+  
+  localStorage.setItem('ai_saved_chats', JSON.stringify(savedChats));
+  renderHistoryList();
+}
+
+function startNewChat() {
+  currentChatId = generateId();
+  currentChatMessages = [];
+  messagesArea.innerHTML = '';
+  messageCount = 0;
+  updateMessageCount();
+  
+  // Restore welcome screen if needed
+  if (!document.getElementById('welcomeScreen')) {
     const welcome = document.createElement('div');
     welcome.className = 'welcome-screen';
     welcome.id = 'welcomeScreen';
@@ -267,9 +332,84 @@ async function clearConversation() {
     `;
     messagesArea.appendChild(welcome);
     loadFaqSuggestions();
-  } catch {
-    showToast('Failed to clear conversation', 'error');
   }
+  
+  if (window.innerWidth < 768) sidebar.classList.remove('open');
+}
+
+function toggleHistoryPanel() {
+  const isOpen = historyPanel.classList.contains('open');
+  if (isOpen) {
+    historyPanel.classList.remove('open');
+    historyOverlay.classList.remove('show');
+  } else {
+    renderHistoryList();
+    historyPanel.classList.add('open');
+    historyOverlay.classList.add('show');
+    if (window.innerWidth < 768) sidebar.classList.remove('open');
+  }
+}
+
+function renderHistoryList() {
+  if (!historyListEl) return;
+  historyListEl.innerHTML = '';
+  
+  const chats = Object.values(savedChats).sort((a, b) => new Date(b.date) - new Date(a.date));
+  
+  if (chats.length === 0) {
+    historyListEl.innerHTML = '<p class="no-history-msg">No saved chats yet.</p>';
+    return;
+  }
+  
+  chats.forEach(chat => {
+    const item = document.createElement('div');
+    item.className = `history-item ${chat.id === currentChatId ? 'active' : ''}`;
+    
+    const title = document.createElement('div');
+    title.className = 'history-item-title';
+    title.textContent = chat.title;
+    
+    const date = document.createElement('div');
+    date.className = 'history-item-date';
+    date.textContent = new Date(chat.date).toLocaleString();
+    
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'history-item-delete';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      delete savedChats[chat.id];
+      localStorage.setItem('ai_saved_chats', JSON.stringify(savedChats));
+      if (chat.id === currentChatId) startNewChat();
+      renderHistoryList();
+    });
+    
+    item.addEventListener('click', () => loadChat(chat.id));
+    
+    item.appendChild(title);
+    item.appendChild(date);
+    item.appendChild(deleteBtn);
+    historyListEl.appendChild(item);
+  });
+}
+
+function loadChat(chatId) {
+  const chat = savedChats[chatId];
+  if (!chat) return;
+  
+  currentChatId = chatId;
+  currentChatMessages = chat.messages || [];
+  
+  messagesArea.innerHTML = '';
+  messageCount = 0;
+  
+  currentChatMessages.forEach(msg => {
+    appendMessage(msg.role, msg.content);
+    if (msg.role === 'user') messageCount++;
+  });
+  
+  updateMessageCount();
+  toggleHistoryPanel();
 }
 
 // ─── Markdown Parser (lightweight) ──────────────────────────────

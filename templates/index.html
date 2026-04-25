@@ -57,6 +57,9 @@
       </div>
 
       <div class="sidebar-footer">
+        <button class="btn-new-chat" id="newChatBtn">
+          <span>+</span> New Chat
+        </button>
         <button class="btn-clear" id="clearBtn">
           <span>🗑</span> Clear Conversation
         </button>
@@ -79,6 +82,9 @@
           </div>
         </div>
         <div class="header-actions">
+          <button class="history-btn" id="historyToggleBtn">
+            ⏱ History
+          </button>
           <div class="api-badge" id="apiBadge">
             <span class="pulse-dot"></span>
             <span id="apiBadgeText">Connecting...</span>
@@ -139,6 +145,19 @@
 
   <!-- Toast Notification -->
   <div class="toast" id="toast"></div>
+
+  <!-- History Panel -->
+  <div class="history-overlay" id="historyOverlay"></div>
+  <aside class="history-panel" id="historyPanel">
+    <div class="history-header">
+      <h2>Chat History</h2>
+      <button class="close-history" id="closeHistoryBtn">✕</button>
+    </div>
+    <div class="history-list" id="historyList">
+      <!-- Chat history items will be injected here -->
+      <p class="no-history-msg">No saved chats yet.</p>
+    </div>
+  </aside>
 
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>

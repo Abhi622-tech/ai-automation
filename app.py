@@ -118,17 +118,19 @@ def chat():
     """Main chat endpoint."""
     data = request.get_json()
     user_message = data.get("message", "").strip()
+    chat_id = data.get("chat_id", None)
 
     if not user_message:
         return jsonify({"error": "Message cannot be empty"}), 400
 
-    session_id = get_session_id()
+    if not chat_id:
+        chat_id = get_session_id()
 
     # Initialize history for this session
-    if session_id not in conversation_histories:
-        conversation_histories[session_id] = []
+    if chat_id not in conversation_histories:
+        conversation_histories[chat_id] = []
 
-    history = conversation_histories[session_id]
+    history = conversation_histories[chat_id]
 
     # Add user message to history
     history.append({"role": "user", "content": user_message})
@@ -141,7 +143,7 @@ def chat():
 
     # Keep history manageable (last 20 messages)
     if len(history) > 20:
-        conversation_histories[session_id] = history[-20:]
+        conversation_histories[chat_id] = history[-20:]
 
     return jsonify({
         "response": ai_response,
@@ -152,10 +154,15 @@ def chat():
 @app.route("/api/clear", methods=["POST"])
 def clear_history():
     """Clear conversation history for the session."""
-    session_id = get_session_id()
-    if session_id in conversation_histories:
-        conversation_histories[session_id] = []
-    return jsonify({"status": "cleared"})
+    data = request.get_json() or {}
+    chat_id = data.get("chat_id", None)
+    
+    if not chat_id:
+        chat_id = get_session_id()
+        
+    if chat_id in conversation_histories:
+        conversation_histories[chat_id] = []
+    return jsonify({"status": "cleared", "chat_id": chat_id})
 
 
 @app.route("/api/faq-suggestions", methods=["GET"])
